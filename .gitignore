@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ChainWatch
+*.db
+chainwatch.db
+credentials.json
+token.json
+data/fallback_events.json

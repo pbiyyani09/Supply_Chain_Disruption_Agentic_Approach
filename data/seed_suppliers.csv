@@ -1,0 +1,10 @@
+name,country_code,product_category,tier,region
+TaiwanSemi Corp,TW,semiconductors,1,Hsinchu
+Shenzhen Electronics,CN,PCB assembly,1,Shenzhen
+Vietnam Textile Co,VN,apparel,1,Ho Chi Minh City
+Mexico Precision Parts,MX,auto components,2,Monterrey
+Germany Chemicals GmbH,DE,specialty chemicals,2,Frankfurt
+India IT Services,IN,software/IT,2,Bangalore
+Bangladesh Garments,BD,raw textiles,3,Dhaka
+South Korea Battery,KR,lithium batteries,1,Seoul
+Malaysia Rubber,MY,industrial rubber,3,Kuala Lumpur

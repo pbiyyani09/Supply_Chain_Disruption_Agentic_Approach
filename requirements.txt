@@ -1,0 +1,50 @@
+# LLM — Google AI Studio (Gemini)
+google-genai>=1.16.0
+
+# Agent orchestration
+langgraph>=0.2.0
+langchain-google-genai>=2.0.0
+
+# API backend
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# Database / ORM
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+
+# Scheduling
+apscheduler>=3.10.0
+
+# Dashboard
+streamlit>=1.38.0
+pydeck>=0.9.0
+plotly>=5.22.0
+
+# Data fetching
+httpx>=0.27.0
+requests>=2.32.0
+feedparser>=6.0.11
+
+# Environment / config
+python-dotenv>=1.0.0
+pydantic>=2.8.0
+pydantic-settings>=2.4.0
+
+# Alerting
+slack-sdk>=3.31.0
+# Gmail API (replaces SendGrid)
+google-auth>=2.35.0
+google-auth-oauthlib>=1.2.0
+google-api-python-client>=2.147.0
+
+# Utilities
+tenacity>=9.0.0
+python-dateutil>=2.9.0
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.23.0
+pytest-mock>=3.14.0
+httpx>=0.27.0
