@@ -16,7 +16,8 @@ from google import genai
 from google.genai import types
 from sqlalchemy.orm import Session
 
-from data.sources import fetch_all_events
+from data.industry_profiles import get_keywords
+from data.sources import fetch_all_events, set_industry_keywords
 from db.crud import create_event, event_exists
 from db.database import SessionLocal
 
@@ -58,9 +59,10 @@ def _classify_event(headline: str) -> dict:
     }
 
 
-def run_signal_monitor() -> int:
+def run_signal_monitor(industry: str = "electronics") -> int:
     """Main entry point called by the scheduler. Returns count of new events stored."""
-    logger.info("[SignalMonitor] Starting scan...")
+    logger.info("[SignalMonitor] Starting scan (industry=%s)...", industry)
+    set_industry_keywords(get_keywords(industry))
     raw_events = fetch_all_events()
     logger.info("[SignalMonitor] Fetched %d candidate events", len(raw_events))
 

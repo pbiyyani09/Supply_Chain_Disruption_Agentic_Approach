@@ -6,7 +6,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from db.models import Alert, Event, RiskScore, Supplier
+from db.models import Alert, EconomicSignal, Event, Forecast, RiskScore, Supplier
 
 
 # ── Suppliers ─────────────────────────────────────────────────────────────────
@@ -160,3 +160,83 @@ def mark_alert_read(db: Session, alert_id: str) -> Optional[Alert]:
 
 def get_unread_count(db: Session) -> int:
     return db.query(Alert).filter(Alert.is_read == False).count()
+
+
+# ── Economic Signals ──────────────────────────────────────────────────────────
+
+def upsert_economic_signal(db: Session, data: dict) -> EconomicSignal:
+    existing = (
+        db.query(EconomicSignal)
+        .filter(EconomicSignal.indicator == data["indicator"], EconomicSignal.date == data["date"])
+        .first()
+    )
+    if existing:
+        for k, v in data.items():
+            setattr(existing, k, v)
+        db.commit()
+        db.refresh(existing)
+        return existing
+    signal = EconomicSignal(**data)
+    db.add(signal)
+    db.commit()
+    db.refresh(signal)
+    return signal
+
+
+def get_latest_signals(db: Session) -> list[EconomicSignal]:
+    """Return the most recent value for each unique indicator."""
+    from sqlalchemy import func
+    subq = (
+        db.query(EconomicSignal.indicator, func.max(EconomicSignal.date).label("max_date"))
+        .group_by(EconomicSignal.indicator)
+        .subquery()
+    )
+    return (
+        db.query(EconomicSignal)
+        .join(subq, (EconomicSignal.indicator == subq.c.indicator) & (EconomicSignal.date == subq.c.max_date))
+        .all()
+    )
+
+
+def get_signal_history(db: Session, indicator: str, limit: int = 12) -> list[EconomicSignal]:
+    return (
+        db.query(EconomicSignal)
+        .filter(EconomicSignal.indicator == indicator)
+        .order_by(EconomicSignal.date.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+# ── Forecasts ─────────────────────────────────────────────────────────────────
+
+def upsert_forecast(db: Session, data: dict) -> Forecast:
+    """Upsert a forecast row (one row per supplier×horizon, replaced on each run)."""
+    existing = (
+        db.query(Forecast)
+        .filter(Forecast.supplier_id == data["supplier_id"], Forecast.horizon == data["horizon"])
+        .first()
+    )
+    if existing:
+        for k, v in data.items():
+            setattr(existing, k, v)
+        existing.created_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return existing
+    fc = Forecast(**data)
+    db.add(fc)
+    db.commit()
+    db.refresh(fc)
+    return fc
+
+
+def get_forecasts_for_supplier(db: Session, supplier_id: str) -> list[Forecast]:
+    _ORDER = {"15d": 0, "30d": 1, "3m": 2, "6m": 3, "1y": 4, "2y": 5}
+    rows = db.query(Forecast).filter(Forecast.supplier_id == supplier_id).all()
+    return sorted(rows, key=lambda r: _ORDER.get(r.horizon, 99))
+
+
+def get_all_latest_forecasts(db: Session) -> list[Forecast]:
+    """Latest forecast per supplier (highest probability horizon)."""
+    return db.query(Forecast).order_by(Forecast.created_at.desc()).all()

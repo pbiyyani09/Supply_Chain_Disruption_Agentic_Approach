@@ -18,6 +18,7 @@ from google.genai import types
 from sqlalchemy.orm import Session
 
 from data.geo_matcher import match_suppliers_to_event
+from data.industry_profiles import get_risk_context
 from db.crud import (
     create_risk_score,
     get_recent_events,
@@ -37,7 +38,7 @@ HIGH_RISK_THRESHOLD = int(os.getenv("HIGH_RISK_THRESHOLD", "7"))
 BATCH_SIZE = 5  # max suppliers per Gemini call
 
 
-def _score_batch(event: Event, suppliers: list[Supplier]) -> list[dict]:
+def _score_batch(event: Event, suppliers: list[Supplier], industry: str = "electronics") -> list[dict]:
     """Score a batch of suppliers against an event in one Gemini call."""
     supplier_profiles = [
         {
@@ -58,8 +59,10 @@ def _score_batch(event: Event, suppliers: list[Supplier]) -> list[dict]:
         "brief_reason": event.brief_reason or "",
     }
 
+    industry_context = get_risk_context(industry)
     prompt = (
         f"{_SCORE_PROMPT}\n\n"
+        f"INDUSTRY CONTEXT:\n{industry_context}\n\n"
         f"EVENT:\n{json.dumps(event_context, indent=2)}\n\n"
         f"SUPPLIERS TO SCORE (in order):\n{json.dumps(supplier_profiles, indent=2)}"
     )
@@ -90,7 +93,7 @@ def _score_batch(event: Event, suppliers: list[Supplier]) -> list[dict]:
     return []
 
 
-def score_event(db: Session, event: Event) -> list[dict]:
+def score_event(db: Session, event: Event, industry: str = "electronics") -> list[dict]:
     """Score all matching suppliers for a single event. Returns list of score records."""
     matched = match_suppliers_to_event(db, event.affected_countries or [])
     if not matched:
@@ -104,7 +107,7 @@ def score_event(db: Session, event: Event) -> list[dict]:
     created_scores = []
     for i in range(0, len(to_score), BATCH_SIZE):
         batch = to_score[i : i + BATCH_SIZE]
-        results = _score_batch(event, batch)
+        results = _score_batch(event, batch, industry=industry)
 
         for supplier, result in zip(batch, results):
             score_val = int(result.get("score", 1))
@@ -129,14 +132,14 @@ def score_event(db: Session, event: Event) -> list[dict]:
     return created_scores
 
 
-def run_risk_scorer() -> list:
+def run_risk_scorer(industry: str = "electronics") -> list:
     """Score all recent unscored events. Called after signal monitor completes."""
     db: Session = SessionLocal()
     all_scores = []
     try:
         events = get_recent_events(db, limit=50)
         for event in events:
-            scores = score_event(db, event)
+            scores = score_event(db, event, industry=industry)
             all_scores.extend(scores)
         # Expunge before close so callers can read scalar attributes
         db.expunge_all()

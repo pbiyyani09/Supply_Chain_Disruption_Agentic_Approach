@@ -12,19 +12,27 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SUPPLY_CHAIN_KEYWORDS = {
+_BASE_KEYWORDS = {
     "port", "shipping", "logistics", "tariff", "strike", "freight",
-    "supply chain", "cargo", "container", "semiconductor", "factory",
-    "manufacturing", "sanctions", "trade", "import", "export",
-    "disruption", "shortage", "inventory", "warehouse", "rail",
-    "pipeline", "refinery", "flood", "earthquake", "typhoon", "hurricane",
-    "geopolitical", "conflict", "blockade", "congestion",
+    "supply chain", "cargo", "container", "factory", "manufacturing",
+    "sanctions", "trade", "import", "export", "disruption", "shortage",
+    "inventory", "warehouse", "rail", "pipeline", "refinery",
+    "flood", "earthquake", "typhoon", "hurricane", "geopolitical",
+    "conflict", "blockade", "congestion",
 }
+
+_active_keywords: set[str] = _BASE_KEYWORDS.copy()
+
+
+def set_industry_keywords(industry_keywords: set[str]) -> None:
+    """Called at scan time to merge industry-specific keywords into the active filter."""
+    global _active_keywords
+    _active_keywords = _BASE_KEYWORDS | {kw.lower() for kw in industry_keywords}
 
 
 def _passes_keyword_filter(text: str) -> bool:
     lower = text.lower()
-    return any(kw in lower for kw in SUPPLY_CHAIN_KEYWORDS)
+    return any(kw.lower() in lower for kw in _active_keywords)
 
 
 # ── GDELT ─────────────────────────────────────────────────────────────────────
@@ -33,14 +41,15 @@ GDELT_BASE = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 def fetch_gdelt_events(max_records: int = 25) -> list[dict[str, Any]]:
     """Query GDELT for recent supply-chain-relevant articles."""
+    # Build query from active keyword set (top 8 to keep URL short)
+    top_kws = list(_active_keywords)[:8]
+    gdelt_query = " OR ".join(f'"{kw}"' if " " in kw else kw for kw in top_kws)
+
     for i, timespan in enumerate(("1h", "6h", "24h")):
         if i > 0:
             time.sleep(2)  # back off between retries to avoid rate limiting
         params = {
-            "query": (
-                "logistics OR shipping OR port OR tariff OR \"supply chain\" "
-                "OR semiconductor OR freight OR strike OR factory"
-            ),
+            "query": gdelt_query,
             "mode": "artlist",
             "maxrecords": max_records,
             "format": "json",
@@ -187,6 +196,107 @@ def fetch_noaa_alerts() -> list[dict[str, Any]]:
         return []
 
 
+# ── USGS Global Earthquakes ───────────────────────────────────────────────────
+
+USGS_QUAKE_URL = "https://earthquake.usgs.gov/fdsnws/event/1/query"
+
+
+def fetch_usgs_earthquakes(min_magnitude: float = 5.0) -> list[dict[str, Any]]:
+    """Fetch recent significant earthquakes globally from USGS (no API key required)."""
+    try:
+        resp = httpx.get(
+            USGS_QUAKE_URL,
+            params={
+                "format": "geojson",
+                "minmagnitude": min_magnitude,
+                "limit": 50,
+                "orderby": "time",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        features = resp.json().get("features", [])
+        events = []
+        for f in features:
+            props = f.get("properties", {})
+            mag = props.get("mag", 0) or 0
+            place = props.get("place", "unknown location")
+            detail_url = props.get("url", "")
+            ts = props.get("time", 0) or 0
+
+            try:
+                pub_dt = datetime.fromtimestamp(ts / 1000)
+            except Exception:
+                pub_dt = datetime.utcnow()
+
+            headline = f"M{mag:.1f} earthquake near {place}"
+            url = detail_url or f"https://earthquake.usgs.gov/earthquakes/#{hash(headline)}"
+
+            if not _passes_keyword_filter(headline) and mag < 6.0:
+                continue
+
+            events.append({
+                "source": "usgs",
+                "headline": headline,
+                "url": url,
+                "published_at": pub_dt,
+            })
+        return events
+    except Exception as exc:
+        print(f"[USGS] fetch error: {exc}")
+        return []
+
+
+# ── ACLED Political Violence & Conflict ───────────────────────────────────────
+
+ACLED_BASE = "https://api.acleddata.com/acled/read"
+
+def fetch_acled_events() -> list[dict[str, Any]]:
+    """Fetch recent political violence events from ACLED (requires free registration).
+
+    Set ACLED_API_KEY and ACLED_EMAIL in .env to enable.
+    """
+    api_key = os.getenv("ACLED_API_KEY", "")
+    email = os.getenv("ACLED_EMAIL", "")
+    if not api_key or not email:
+        return []
+
+    try:
+        resp = httpx.get(
+            ACLED_BASE,
+            params={
+                "key": api_key,
+                "email": email,
+                "limit": 30,
+                "fields": "event_date|event_type|country|iso|location|notes",
+                "event_type": "Battles:Explosions/Remote violence:Protests:Riots",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        rows = resp.json().get("data", [])
+        events = []
+        for r in rows:
+            headline = f"{r.get('event_type', 'Conflict')} in {r.get('location', '')}, {r.get('country', '')} — {r.get('notes', '')[:80]}"
+            if not _passes_keyword_filter(headline):
+                continue
+            url = f"https://acleddata.com/#{r.get('data_id', hash(headline))}"
+            try:
+                pub_dt = datetime.strptime(r.get("event_date", ""), "%Y-%m-%d")
+            except Exception:
+                pub_dt = datetime.utcnow()
+            events.append({
+                "source": "acled",
+                "headline": headline,
+                "url": url,
+                "published_at": pub_dt,
+            })
+        return events
+    except Exception as exc:
+        print(f"[ACLED] fetch error: {exc}")
+        return []
+
+
 # ── Combined fetcher ──────────────────────────────────────────────────────────
 
 def fetch_all_events() -> list[dict[str, Any]]:
@@ -194,4 +304,6 @@ def fetch_all_events() -> list[dict[str, Any]]:
     events.extend(fetch_gdelt_events())
     events.extend(fetch_newsapi_events())
     events.extend(fetch_noaa_alerts())
+    events.extend(fetch_usgs_earthquakes())
+    events.extend(fetch_acled_events())
     return events

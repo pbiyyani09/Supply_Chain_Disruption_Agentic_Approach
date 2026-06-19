@@ -55,7 +55,7 @@ def _ask_gemini(system_prompt: str, history: list[dict], user_message: str) -> s
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.2,
-                max_output_tokens=512,
+                max_output_tokens=1024,
             ),
         )
         return response.text.strip()
