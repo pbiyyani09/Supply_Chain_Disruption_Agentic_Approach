@@ -1,10 +1,12 @@
 """Economic Signal Panel — live macro indicators that serve as leading risk signals."""
 from __future__ import annotations
 
+import os
+
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8000"
+API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 
 _TREND_ICON = {"rising": "📈", "falling": "📉", "stable": "➡️"}
 _TREND_COLOR = {"rising": "red", "falling": "green", "stable": "gray"}

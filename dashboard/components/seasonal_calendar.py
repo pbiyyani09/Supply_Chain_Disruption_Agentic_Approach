@@ -1,6 +1,7 @@
 """Seasonal Risk Calendar — upcoming disruption windows by industry."""
 from __future__ import annotations
 
+import os
 from datetime import date
 
 import pandas as pd
@@ -8,7 +9,7 @@ import plotly.express as px
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8000"
+API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 
 _SEV_COLOR = {"high": "#dc3545", "medium": "#fd7e14", "low": "#28a745"}
 _SEV_ICON = {"high": "🔴", "medium": "🟡", "low": "🟢"}

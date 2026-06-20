@@ -1,10 +1,12 @@
 """Forecast Tab — multi-horizon disruption probability forecasts per supplier."""
 from __future__ import annotations
 
+import os
+
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8000"
+API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 
 _HORIZON_LABELS = {
     "15d": "15 Days",

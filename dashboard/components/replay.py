@@ -1,13 +1,14 @@
 """Replay mode — date-range slider that replays historical events chronologically."""
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 import plotly.express as px
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8000"
+API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 
 
 def render_replay(suppliers: list[dict]) -> None:

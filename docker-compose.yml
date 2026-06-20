@@ -12,6 +12,7 @@ services:
       - DATABASE_URL=sqlite:////data/chainwatch.db
       - VECTOR_DB_PATH=/data/chainwatch_vectors.db
       # Cross-service URLs (override any localhost values from .env)
+      - PHOENIX_ENABLED=true
       - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006
       - OLLAMA_HOST=http://ollama:11434
     depends_on:
@@ -30,6 +31,8 @@ services:
     environment:
       - DATABASE_URL=sqlite:////data/chainwatch.db
       - VECTOR_DB_PATH=/data/chainwatch_vectors.db
+      - API_BASE=http://api:8000
+      - PHOENIX_ENABLED=true
       - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006
     depends_on:
       - api
