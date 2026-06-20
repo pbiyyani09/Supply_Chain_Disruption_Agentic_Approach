@@ -18,12 +18,14 @@ _HORIZON_LABELS = {
 _CONFIDENCE_ICON = {"high": "🔴", "medium": "🟡", "low": "🔵"}
 _TREND_ICON = {"escalating": "📈", "stable": "➡️", "improving": "📉"}
 
-_PROB_COLOR = lambda p: (
-    "#dc3545" if p >= 0.65 else
-    "#fd7e14" if p >= 0.4 else
-    "#ffc107" if p >= 0.2 else
-    "#28a745"
-)
+def _prob_color(p: float) -> str:
+    if p >= 0.65:
+        return "#dc3545"
+    if p >= 0.4:
+        return "#fd7e14"
+    if p >= 0.2:
+        return "#ffc107"
+    return "#28a745"
 
 
 @st.cache_data(ttl=120)
@@ -46,9 +48,8 @@ def _get_summary() -> list[dict]:
 
 def _prob_bar(prob: float, width: int = 200) -> str:
     pct = int(prob * 100)
-    color = _PROB_COLOR(prob)
+    color = _prob_color(prob)
     filled = int(pct * width / 100)
-    empty = width - filled
     return (
         f'<div style="display:inline-flex;align-items:center;gap:8px;">'
         f'<div style="width:{width}px;height:16px;background:#e9ecef;border-radius:8px;overflow:hidden;">'
@@ -109,7 +110,6 @@ def render_forecast_tab(suppliers: list[dict], industry: str = "electronics") ->
 
     if selected_name:
         selected_summary = next((s for s in summary if s["supplier_name"] == selected_name), None)
-        supplier_id = next((s["supplier_id"] for s in summary if s["supplier_name"] == selected_name), None)
 
         if selected_summary:
             trend_icon = _TREND_ICON.get(selected_summary.get("overall_trend", "stable"), "➡️")

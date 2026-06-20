@@ -1,0 +1,45 @@
+[
+  {
+    "id": "redsea-eu-auto",
+    "category": "geopolitical",
+    "user_input": "How does the Red Sea shipping crisis affect EU automotive supply chains?",
+    "retrieved_contexts": [
+      "Houthi attacks in the Red Sea have forced major carriers (Maersk, MSC) to reroute around the Cape of Good Hope, adding 10-14 days to Asia-Europe transit.",
+      "European automotive plants run lean just-in-time inventory; component lead times from Asia have extended from 30 to 45 days."
+    ],
+    "response": "The Red Sea crisis reroutes Asia-Europe container traffic around Africa, adding 10-14 days transit. EU automotive plants on just-in-time inventory face component lead times stretching from 30 to roughly 45 days, raising stockout risk for Tier 1 suppliers.",
+    "reference": "Rerouting around the Cape of Good Hope adds 10-14 days to Asia-Europe shipping, extending automotive component lead times from about 30 to 45 days and stressing just-in-time inventories."
+  },
+  {
+    "id": "taiwan-typhoon-semi",
+    "category": "weather",
+    "user_input": "What is the disruption risk to Taiwanese semiconductor suppliers during typhoon season?",
+    "retrieved_contexts": [
+      "Pacific typhoon season (Jun-Nov) brings peak storm activity to Taiwan, where major semiconductor fabs are concentrated around Hsinchu.",
+      "Fabs maintain backup power and water, but port closures at Kaohsiung can delay outbound chip shipments by several days."
+    ],
+    "response": "During the June-November Pacific typhoon season, Taiwanese fabs near Hsinchu face elevated weather risk. While fabs have backup utilities, Kaohsiung port closures can delay outbound chip shipments by several days, creating short-window logistics disruption.",
+    "reference": "Typhoon season (Jun-Nov) threatens Taiwanese fabs mainly through port closures at Kaohsiung that delay chip shipments by days, though fabs maintain backup power and water."
+  },
+  {
+    "id": "panama-drought-logistics",
+    "category": "logistics",
+    "user_input": "How does the Panama Canal drought impact transit times?",
+    "retrieved_contexts": [
+      "Low water levels at the Panama Canal have cut daily transit slots and draft limits, forcing some carriers to reroute or wait in queue.",
+      "Reduced slots increase Asia-US East Coast transit variability and spot freight costs."
+    ],
+    "response": "Drought-driven low water at the Panama Canal reduces daily transit slots and draft limits, lengthening Asia-US East Coast transit and raising spot freight costs as carriers queue or reroute.",
+    "reference": "Panama Canal drought reduces transit slots and draft limits, increasing Asia-US East Coast transit times and spot freight costs."
+  },
+  {
+    "id": "fab-fire-hallucinated",
+    "category": "geopolitical",
+    "user_input": "Did a fire destroy 80% of global chip capacity last week?",
+    "retrieved_contexts": [
+      "A minor fire was reported at a single packaging facility; the operator stated production was unaffected and no capacity was lost."
+    ],
+    "response": "A catastrophic fire destroyed 80% of global semiconductor capacity last week, causing a 6-month worldwide chip shortage and tripling prices.",
+    "reference": "A minor fire occurred at one packaging facility with no production impact or capacity loss; claims of an 80% global capacity loss are false."
+  }
+]

@@ -8,6 +8,7 @@ RULES:
 3. "severity_hint" is a first-pass estimate only. Default to "medium" when unsure — never default to "high" without strong evidence.
 4. "category" must be one of: weather, geopolitical, logistics, labor, cyber.
 5. "brief_reason" must be one concise sentence (max 20 words) explaining relevance.
+6. An optional "Article excerpt" may follow the headline — use it for added context when present; otherwise classify on the headline alone.
 
 OUTPUT FORMAT — return exactly this JSON schema:
 {

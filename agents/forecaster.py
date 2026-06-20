@@ -14,19 +14,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from pathlib import Path
 
-from dotenv import load_dotenv
-from google import genai
 from google.genai import types
 from sqlalchemy.orm import Session
 
 from data.seasonal_calendar import get_risk_context_for_country
 from db.crud import (
-    get_all_latest_forecasts,
-    get_forecasts_for_supplier,
     get_latest_signals,
     get_recent_events,
     get_risk_scores_for_supplier,
@@ -35,15 +30,16 @@ from db.crud import (
 )
 from db.database import SessionLocal
 from db.models import EconomicSignal, Supplier
+from providers import get_gemini_client, get_model_name
+from schemas import ForecastOutput, ScenarioOutput, parse_object
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 _FORECAST_PROMPT = (Path(__file__).parent.parent / "prompts" / "forecast.txt").read_text()
 _SCENARIO_PROMPT = (Path(__file__).parent.parent / "prompts" / "scenario.txt").read_text()
 
-_client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+_client = get_gemini_client()
+_MODEL = get_model_name()
 
 HORIZONS = ["15d", "30d", "3m", "6m", "1y", "2y"]
 
@@ -127,28 +123,26 @@ def _forecast_supplier(
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    response_schema=ForecastOutput,
                     temperature=0.2,
                     max_output_tokens=4096,
                 ),
             )
-            result = json.loads(response.text)
-            forecasts = result.get("forecasts", [])
-            overall_trend = result.get("overall_trend", "stable")
+            parsed = parse_object(response, ForecastOutput)
 
             rows = []
-            for fc in forecasts:
-                h = fc.get("horizon", "")
-                if h not in HORIZONS:
+            for fc in parsed.forecasts:
+                if fc.horizon not in HORIZONS:
                     continue
                 rows.append({
                     "supplier_id": supplier.id,
                     "industry": industry,
-                    "horizon": h,
-                    "disruption_probability": float(fc.get("disruption_probability", 0.1)),
-                    "confidence": fc.get("confidence", "low"),
-                    "drivers": fc.get("primary_drivers", []),
-                    "scenario": fc.get("scenario", ""),
-                    "overall_trend": overall_trend,
+                    "horizon": fc.horizon,
+                    "disruption_probability": fc.disruption_probability,
+                    "confidence": fc.confidence,
+                    "drivers": fc.primary_drivers,
+                    "scenario": fc.scenario,
+                    "overall_trend": parsed.overall_trend,
                 })
             return rows
 
@@ -220,11 +214,12 @@ def run_scenario_analysis(scenario_text: str, suppliers: list[dict]) -> dict:
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    response_schema=ScenarioOutput,
                     temperature=0.3,
                     max_output_tokens=8192,
                 ),
             )
-            return json.loads(response.text)
+            return parse_object(response, ScenarioOutput).model_dump()
         except Exception as exc:
             wait = 2 ** attempt * 3
             logger.warning("[Scenario] attempt %d failed: %s — retry in %ds", attempt + 1, exc, wait)
@@ -243,5 +238,8 @@ def run_scenario_analysis(scenario_text: str, suppliers: list[dict]) -> dict:
 
 
 if __name__ == "__main__":
+    from observability import setup_observability
+
+    setup_observability()
     logging.basicConfig(level=logging.INFO)
     run_forecaster()

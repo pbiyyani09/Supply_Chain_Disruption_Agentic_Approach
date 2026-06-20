@@ -43,6 +43,24 @@ google-api-python-client>=2.147.0
 tenacity>=9.0.0
 python-dateutil>=2.9.0
 
+# Observability — Arize Phoenix (self-hosted, OpenTelemetry). Gated by PHOENIX_ENABLED.
+# Heavier deps (sqlite-vec, sentence-transformers, ollama, ragas,
+# openinference-instrumentation-langchain) are added in the phase that introduces them.
+arize-phoenix-otel>=0.6.0
+openinference-instrumentation-google-genai>=0.1.0
+openinference-instrumentation-langchain>=0.1.0
+
+# Web research — Tavily (Phase 1). Gated by TAVILY_ENABLED; no-op without a key.
+tavily-python>=0.5.0
+
+# RAG retrieval (Phase 2) — local vector store in a dedicated SQLite file.
+sqlite-vec>=0.1.6
+
+# Self-hosted Gemma client (Phase 3 rerank / Phase 4 judge) — light HTTP client.
+# NOTE: the cross-encoder reranker needs `sentence-transformers` (Torch); install
+# it only if wanted via `uv sync --group rerank` — it is NOT a runtime dep.
+ollama>=0.6.0
+
 # Testing
 pytest>=8.3.0
 pytest-asyncio>=0.23.0

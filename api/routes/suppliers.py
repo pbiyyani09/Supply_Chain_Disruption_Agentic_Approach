@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import io
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -19,11 +18,11 @@ class SupplierOut(BaseModel):
     id: str
     name: str
     country_code: str
-    region: Optional[str]
+    region: str | None
     product_category: str
     tier: int
-    lat: Optional[float]
-    lng: Optional[float]
+    lat: float | None
+    lng: float | None
 
     model_config = {"from_attributes": True}
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from data.seasonal_calendar import get_active_windows, get_upcoming_windows, SEASONAL_WINDOWS
+from data.seasonal_calendar import SEASONAL_WINDOWS, get_active_windows, get_upcoming_windows
 
 router = APIRouter(prefix="/seasonal-risks", tags=["seasonal-risks"])
 

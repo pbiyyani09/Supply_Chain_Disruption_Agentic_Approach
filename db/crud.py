@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from db.models import Alert, EconomicSignal, Event, Forecast, RiskScore, Supplier
-
 
 # ── Suppliers ─────────────────────────────────────────────────────────────────
 
@@ -55,7 +53,7 @@ def create_event(db: Session, data: dict) -> Event:
 def get_recent_events(db: Session, limit: int = 100) -> list[Event]:
     return (
         db.query(Event)
-        .filter(Event.is_supply_chain_relevant == True)
+        .filter(Event.is_supply_chain_relevant.is_(True))
         .order_by(Event.ingested_at.desc())
         .limit(limit)
         .all()
@@ -149,7 +147,7 @@ def get_recent_alerts(db: Session, limit: int = 20) -> list[Alert]:
     )
 
 
-def mark_alert_read(db: Session, alert_id: str) -> Optional[Alert]:
+def mark_alert_read(db: Session, alert_id: str) -> Alert | None:
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if alert:
         alert.is_read = True
@@ -159,7 +157,7 @@ def mark_alert_read(db: Session, alert_id: str) -> Optional[Alert]:
 
 
 def get_unread_count(db: Session) -> int:
-    return db.query(Alert).filter(Alert.is_read == False).count()
+    return db.query(Alert).filter(Alert.is_read.is_(False)).count()
 
 
 # ── Economic Signals ──────────────────────────────────────────────────────────

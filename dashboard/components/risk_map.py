@@ -102,7 +102,6 @@ def render_risk_map(suppliers: list[dict], risk_scores: list[dict], alerts: list
 
     df = pd.DataFrame(rows)
     df_scored = df[df["score"] > 0]
-    df_safe = df[df["score"] == 0]
 
     scatter_layer = pdk.Layer(
         "ScatterplotLayer",

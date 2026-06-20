@@ -1,21 +1,18 @@
 """Conversational Q&A component powered by Gemini with live data context injection."""
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 
 import streamlit as st
-from dotenv import load_dotenv
-from google import genai
 from google.genai import types
 
-load_dotenv()
+from providers import get_gemini_client, get_model_name
+from rag.retrieval import format_context, retrieve_best
 
 _CHAT_PROMPT_TEMPLATE = (Path(__file__).parent.parent.parent / "prompts" / "chat_context.txt").read_text()
 
-_client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+_client = get_gemini_client()
+_MODEL = get_model_name()
 
 
 def _build_system_prompt(suppliers: list[dict], top_events: list[dict], recent_alerts: list[dict]) -> str:
@@ -81,6 +78,13 @@ def render_chat(suppliers: list[dict], top_events: list[dict], recent_alerts: li
             st.write(user_input)
 
         system_prompt = _build_system_prompt(suppliers, top_events, recent_alerts)
+        # Ground the answer in retrieved institutional memory (RAG), when enabled.
+        retrieved = format_context(retrieve_best(user_input, top_k=4))
+        if retrieved:
+            system_prompt += (
+                "\n\nRETRIEVED CONTEXT (similar past events / briefs / playbooks — "
+                f"cite when relevant):\n{retrieved}"
+            )
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 answer = _ask_gemini(system_prompt, st.session_state.chat_history[:-1], user_input)

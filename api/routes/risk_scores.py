@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -18,12 +17,12 @@ class RiskScoreOut(BaseModel):
     id: str
     event_id: str
     supplier_id: str
-    supplier_name: Optional[str] = None
+    supplier_name: str | None = None
     score: int
     impact_window: str
     affected_tiers: list
     reasoning: str
-    scored_at: Optional[datetime]
+    scored_at: datetime | None
 
     model_config = {"from_attributes": True}
 

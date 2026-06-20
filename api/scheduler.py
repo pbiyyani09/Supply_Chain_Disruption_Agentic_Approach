@@ -29,83 +29,14 @@ FORECAST_INTERVAL = int(os.getenv("FORECAST_INTERVAL_HOURS", "4"))  # re-forecas
 
 
 def _run_pipeline() -> None:
-    """Execute the full 7-agent pipeline in sequence."""
-    from agents.alert_dispatcher import dispatch_alert
-    from agents.forecaster import run_forecaster
-    from agents.impact_analyst import write_brief_for_score
-    from agents.risk_scorer import run_risk_scorer
-    from agents.signal_monitor import run_signal_monitor
-    from data.economic_signals import fetch_economic_signals
-    from data.weather import fetch_weather_for_suppliers
-    from db.crud import create_event, event_exists, get_suppliers, upsert_economic_signal
-    from db.database import SessionLocal
+    """Execute the full pipeline via the LangGraph orchestration (scheduled tick)."""
+    from orchestration.graph import run_pipeline
 
     industry = os.getenv("DEFAULT_INDUSTRY", "electronics")
-    logger.info("[Pipeline] Starting tick (industry=%s)...", industry)
-
-    # 1. Signal Monitor
-    run_signal_monitor(industry=industry)
-
-    # 2. Economic Signals
-    _refresh_economic_signals(industry)
-
-    # 3. Weather scan for supplier locations
-    db = SessionLocal()
     try:
-        supplier_list = get_suppliers(db)
-        supplier_dicts = [
-            {"name": s.name, "country_code": s.country_code, "lat": s.lat, "lng": s.lng}
-            for s in supplier_list
-        ]
-    finally:
-        db.close()
-
-    if supplier_dicts:
-        weather_events = fetch_weather_for_suppliers(supplier_dicts)
-        db = SessionLocal()
-        try:
-            for we in weather_events:
-                if we.get("url") and not event_exists(db, we["url"]):
-                    from agents.signal_monitor import _classify_event
-                    cls = _classify_event(we["headline"])
-                    if cls.get("is_supply_chain_relevant", True):
-                        create_event(db, {
-                            "source": we["source"],
-                            "headline": we["headline"],
-                            "url": we["url"],
-                            "category": cls.get("category", "weather"),
-                            "affected_countries": cls.get("affected_countries", []),
-                            "severity_hint": cls.get("severity_hint", "medium"),
-                            "is_supply_chain_relevant": True,
-                            "brief_reason": cls.get("brief_reason", ""),
-                            "published_at": we.get("published_at"),
-                        })
-        finally:
-            db.close()
-
-    # 4. Risk Scorer
-    scores = run_risk_scorer(industry=industry)
-    threshold = int(os.getenv("HIGH_RISK_THRESHOLD", "7"))
-    high_scores = [s for s in scores if s.score >= threshold]
-
-    # 5+6. Impact Analyst + Alert Dispatcher
-    if high_scores:
-        db = SessionLocal()
-        try:
-            for rs in high_scores:
-                brief, alternatives = write_brief_for_score(db, rs)
-                dispatch_alert(db, rs, brief, alternatives)
-        finally:
-            db.close()
-
-    # 7. Forecaster
-    run_forecaster(industry=industry)
-
-    logger.info(
-        "[Pipeline] Tick complete — %d scores, %d HIGH alerts",
-        len(scores),
-        len(high_scores),
-    )
+        run_pipeline(industry=industry)
+    except Exception as exc:
+        logger.warning("[Pipeline] scheduled tick failed: %s", exc)
 
 
 def _refresh_economic_signals(industry: str = "electronics") -> None:

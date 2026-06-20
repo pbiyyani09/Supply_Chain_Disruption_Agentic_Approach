@@ -1,7 +1,7 @@
 """Replay mode — date-range slider that replays historical events chronologically."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import plotly.express as px
 import requests

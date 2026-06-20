@@ -1,15 +1,12 @@
 """End-to-end integration test — seeds mock events and verifies the pipeline stores scores."""
 from __future__ import annotations
 
-import json
-from unittest.mock import MagicMock, patch
-
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from db.crud import create_event, get_recent_events
 from db.models import Base
-from db.crud import create_event, get_recent_events, upsert_supplier, get_high_risk_scores
 
 
 @pytest.fixture()

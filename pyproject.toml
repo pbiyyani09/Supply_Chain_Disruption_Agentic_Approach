@@ -1,0 +1,125 @@
+[project]
+name = "supply-chain-disruption-agentic-approach"
+version = "0.1.0"
+description = "ChainWatch — 4-agent supply chain disruption early warning system"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    # LLM — Google AI Studio (Gemini)
+    "google-genai>=1.16.0",
+    # Agent orchestration
+    "langgraph>=0.2.0",
+    "langchain-google-genai>=2.0.0",
+    # API backend
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-multipart>=0.0.9",
+    # Database / ORM
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.13.0",
+    # Scheduling
+    "apscheduler>=3.10.0",
+    # Dashboard
+    "streamlit>=1.38.0",
+    "pydeck>=0.9.0",
+    "plotly>=5.22.0",
+    # Data fetching
+    "httpx>=0.27.0",
+    "requests>=2.32.0",
+    "feedparser>=6.0.11",
+    # Environment / config
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    # Alerting
+    "slack-sdk>=3.31.0",
+    # Gmail API (replaces SendGrid)
+    "google-auth>=2.35.0",
+    "google-auth-oauthlib>=1.2.0",
+    "google-api-python-client>=2.147.0",
+    # Utilities
+    "tenacity>=9.0.0",
+    "python-dateutil>=2.9.0",
+    # Observability — Arize Phoenix (self-hosted, OpenTelemetry). Gated by PHOENIX_ENABLED.
+    "arize-phoenix-otel>=0.6.0",
+    "openinference-instrumentation-google-genai>=0.1.0",
+    # Traces the LangGraph pipeline (Phase 5); auto-discovered by register().
+    "openinference-instrumentation-langchain>=0.1.0",
+    # Web research — Tavily (Phase 1). Gated by TAVILY_ENABLED; no-op without a key.
+    "tavily-python>=0.5.0",
+    # RAG retrieval (Phase 2) — local vector store in a dedicated SQLite file.
+    "sqlite-vec>=0.1.6",
+    # Self-hosted Gemma client (Phase 3 rerank / Phase 4 judge). Light HTTP client.
+    "ollama>=0.6.0",
+    # NOTE: sentence-transformers (Torch, heavy) is an OPTIONAL group below, not a
+    # runtime dep — installed only when the cross-encoder reranker is wanted.
+    # ragas (Phase 4) and openinference-instrumentation-langchain (Phase 5) follow.
+]
+
+[dependency-groups]
+# Default group synced in CI — lightweight: tests + linters only.
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.6.0",
+    "pydoclint>=0.5.0",
+]
+# Opt-in (`uv sync --group viz`) — Phoenix server UI/collector, local only.
+# Kept out of the default group so CI never installs the heavy server.
+viz = [
+    "arize-phoenix>=4.0.0",
+]
+# Opt-in (`uv sync --group rerank`) — cross-encoder reranker. Pulls PyTorch, so
+# kept out of the default/runtime install; the rerank module no-ops without it.
+rerank = [
+    "sentence-transformers>=3.0.0",
+]
+# Opt-in (`uv sync --group evals`) — Ragas RAG-quality metrics. Offline/CI use
+# only; not needed by the serving pipeline.
+evals = [
+    "ragas>=0.2.0",
+]
+# Opt-in (`uv sync --group docs`) — documentation site + navigable PDF.
+docs = [
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.26.0",
+    "mkdocs-with-pdf>=0.9.3",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+# E/F = pyflakes+pycodestyle, I = isort, B = bugbear, UP = pyupgrade,
+# D = pydocstyle (Google convention) for public-API docstring enforcement.
+select = ["E", "F", "I", "B", "UP", "D"]
+ignore = [
+    "D104",  # missing docstring in public package (__init__.py)
+    "D105",  # missing docstring in magic method
+    "D107",  # missing docstring in __init__
+    "E501",  # line length handled by formatter, not a hard error
+    "B008",  # function call in default arg — idiomatic FastAPI (Query()/Depends())
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Docstring (D) enforcement is applied progressively. New/core modules
+# (schemas, providers, observability, agents, api/main, and future
+# rag/guardrails/orchestration) must carry Google-style docstrings now;
+# the pre-existing legacy modules below are exempted until Phase 7 documents
+# them. Tests/scripts never need full docstrings.
+"tests/*" = ["D"]
+"scripts/*" = ["D"]
+"data/*" = ["D"]
+"db/*" = ["D"]
+"api/routes/*" = ["D"]
+"api/scheduler.py" = ["D"]
+"dashboard/*" = ["D"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

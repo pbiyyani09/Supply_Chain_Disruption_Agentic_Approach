@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -21,8 +20,8 @@ class EventOut(BaseModel):
     category: str
     affected_countries: list
     severity_hint: str
-    published_at: Optional[datetime]
-    ingested_at: Optional[datetime]
+    published_at: datetime | None
+    ingested_at: datetime | None
 
     model_config = {"from_attributes": True}
 

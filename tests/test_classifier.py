@@ -3,9 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-
 MOCK_HIGH_RESPONSE = """{
     "category": "logistics",
     "affected_countries": ["TW", "CN"],

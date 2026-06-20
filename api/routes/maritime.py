@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from data.maritime import fetch_port_congestion, STRATEGIC_PORTS
+from data.maritime import STRATEGIC_PORTS, fetch_port_congestion
 
 router = APIRouter(prefix="/maritime", tags=["maritime"])
 

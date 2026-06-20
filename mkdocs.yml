@@ -1,0 +1,60 @@
+site_name: ChainWatch Documentation
+site_description: 4→5-agent supply-chain disruption early-warning system (v3.0)
+docs_dir: docs
+
+# Pre-existing planning note lives under docs/ but is not part of the manual.
+exclude_docs: |
+  project_plan.md
+
+theme:
+  name: material
+  features:
+    - navigation.expand
+    - navigation.top
+    - toc.integrate
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["."]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            heading_level: 2
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+  # Navigable PDF (cover + clickable TOC + bookmarks). Only runs when
+  # ENABLE_PDF_EXPORT=1, so plain `mkdocs build` (HTML) stays fast.
+  - with-pdf:
+      output_path: ChainWatch-Documentation.pdf
+      cover_title: ChainWatch
+      cover_subtitle: Supply-Chain Disruption Early-Warning — Technical Documentation (v3.0)
+      toc_level: 3
+      enabled_if_env: ENABLE_PDF_EXPORT
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - API Reference:
+      - Output contracts (schemas): api/schemas.md
+      - Providers & observability: api/platform.md
+      - Web research (Tavily): api/web.md
+      - Guardrails: api/guardrails.md
+      - RAG layer: api/rag.md
+      - Agents: api/agents.md
+      - Orchestration: api/orchestration.md

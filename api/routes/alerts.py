@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel
@@ -16,17 +15,17 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 class AlertOut(BaseModel):
     id: str
     level: str
-    brief: Optional[str]
+    brief: str | None
     alternatives: list
     dispatched_via: list
     is_read: bool
-    created_at: Optional[datetime]
-    supplier_name: Optional[str] = None
-    supplier_country: Optional[str] = None
-    event_headline: Optional[str] = None
-    event_category: Optional[str] = None
-    score: Optional[int] = None
-    impact_window: Optional[str] = None
+    created_at: datetime | None
+    supplier_name: str | None = None
+    supplier_country: str | None = None
+    event_headline: str | None = None
+    event_category: str | None = None
+    score: int | None = None
+    impact_window: str | None = None
 
     model_config = {"from_attributes": True}
 

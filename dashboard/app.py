@@ -4,8 +4,9 @@ Tabs: Risk Map | Alerts | Timeline | Forecast | Signals | Maritime | Calendar | 
 """
 from __future__ import annotations
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import requests
@@ -21,6 +22,11 @@ from dashboard.components.risk_map import render_risk_map
 from dashboard.components.scenario import render_scenario_builder
 from dashboard.components.seasonal_calendar import render_seasonal_calendar
 from data.industry_profiles import INDUSTRY_PROFILES, all_labels
+from observability import setup_observability
+
+# Trace the dashboard's own Gemini chat calls when PHOENIX_ENABLED=true.
+# Safe no-op otherwise; runs before any chat call (which happens on user action).
+setup_observability()
 
 API_BASE = "http://localhost:8000"
 

@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api:
     build: .
@@ -12,6 +10,12 @@ services:
       - .env
     environment:
       - DATABASE_URL=sqlite:////data/chainwatch.db
+      - VECTOR_DB_PATH=/data/chainwatch_vectors.db
+      # Cross-service URLs (override any localhost values from .env)
+      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      - phoenix
     restart: unless-stopped
 
   dashboard:
@@ -19,13 +23,38 @@ services:
     command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0
     ports:
       - "8501:8501"
+    volumes:
+      - chainwatch_data:/data
     env_file:
       - .env
+    environment:
+      - DATABASE_URL=sqlite:////data/chainwatch.db
+      - VECTOR_DB_PATH=/data/chainwatch_vectors.db
+      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006
     depends_on:
       - api
     restart: unless-stopped
 
-  # Uncomment below to use PostgreSQL in production instead of SQLite
+  # Arize Phoenix — self-hosted trace collector + UI (http://localhost:6006).
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - "6006:6006"   # UI + HTTP OTLP
+      - "4317:4317"   # gRPC OTLP
+    restart: unless-stopped
+
+  # Self-hosted Gemma for reranking + the faithfulness judge.
+  # First run: `docker compose exec ollama ollama pull gemma3:4b`
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+  # Uncomment to use PostgreSQL in production instead of SQLite. RAG keeps its own
+  # sqlite-vec file via VECTOR_DB_PATH, so retrieval works either way.
   # db:
   #   image: postgres:16-alpine
   #   environment:
@@ -39,4 +68,5 @@ services:
 
 volumes:
   chainwatch_data:
+  ollama_models:
   # postgres_data:

@@ -18,7 +18,6 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -106,7 +105,7 @@ def _yahoo_fetch(symbol: str, lookback_days: int = 90) -> list[dict]:
         closes = result[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
 
         obs = []
-        for ts, val in zip(timestamps, closes):
+        for ts, val in zip(timestamps, closes, strict=False):
             if val is not None:
                 dt = datetime.fromtimestamp(ts)
                 obs.append({"date": dt.strftime("%Y-%m-%d"), "value": float(val)})

@@ -9,19 +9,17 @@ Gmail replaces SendGrid (Google ecosystem; free quota is ample for demos).
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 from slack_sdk.webhook import WebhookClient
 from sqlalchemy.orm import Session
 
-from db.crud import alert_in_cooldown, create_alert, get_recent_alerts
+from db.crud import alert_in_cooldown, create_alert
 from db.models import Alert, Event, RiskScore, Supplier
 
 load_dotenv()
@@ -150,18 +148,18 @@ def _send_gmail(alert: Alert, risk_score: RiskScore) -> bool:
 
     subject = f"[ChainWatch {alert.level}] {supplier.name} — {event.category.title()} Risk (Score: {risk_score.score}/10)"
     body_lines = [
-        f"ChainWatch Supply Chain Alert",
+        "ChainWatch Supply Chain Alert",
         f"{'='*50}",
-        f"",
+        "",
         f"Supplier: {supplier.name} ({supplier.country_code})",
         f"Risk Score: {risk_score.score}/10",
         f"Impact Window: {risk_score.impact_window}",
         f"Alert Level: {alert.level}",
         f"Event: {event.headline}",
-        f"",
-        f"--- BRIEF ---",
+        "",
+        "--- BRIEF ---",
         alert.brief or risk_score.reasoning,
-        f"",
+        "",
     ]
     if alert.alternatives:
         body_lines.append(f"Alternative regions: {', '.join(alert.alternatives)}")
@@ -189,7 +187,7 @@ def dispatch_alert(
     risk_score: RiskScore,
     brief: str,
     alternatives: list[str],
-) -> Optional[Alert]:
+) -> Alert | None:
     """Check cooldown, create alert record, and dispatch to all channels."""
     event: Event = risk_score.event
     supplier: Supplier = risk_score.supplier

@@ -12,13 +12,13 @@ import os
 import time
 from pathlib import Path
 
-from dotenv import load_dotenv
-from google import genai
 from google.genai import types
 from sqlalchemy.orm import Session
 
 from data.geo_matcher import match_suppliers_to_event
 from data.industry_profiles import get_risk_context
+from data.tavily_research import confirm_medium_event, supplier_deep_search
+from data.tavily_research import is_enabled as tavily_enabled
 from db.crud import (
     create_risk_score,
     get_recent_events,
@@ -26,20 +26,76 @@ from db.crud import (
 )
 from db.database import SessionLocal
 from db.models import Event, Supplier
+from guardrails.injection import guard_scraped_text
+from providers import get_gemini_client, get_model_name
+from rag.retrieval import format_context, retrieve_best
+from schemas import SupplierRiskScore, parse_list
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 _SCORE_PROMPT = (Path(__file__).parent.parent / "prompts" / "score_risk.txt").read_text()
 
-_client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+_client = get_gemini_client()
+_MODEL = get_model_name()
 HIGH_RISK_THRESHOLD = int(os.getenv("HIGH_RISK_THRESHOLD", "7"))
 BATCH_SIZE = 5  # max suppliers per Gemini call
 
 
-def _score_batch(event: Event, suppliers: list[Supplier], industry: str = "electronics") -> list[dict]:
-    """Score a batch of suppliers against an event in one Gemini call."""
+def _live_supplier_context(suppliers: list[Supplier]) -> str:
+    """Build a `LIVE CONTEXT` prompt block from per-supplier Tavily searches.
+
+    The heaviest Tavily placement (up to one search per supplier), so it is
+    gated by both ``TAVILY_ENABLED`` and an explicit ``TAVILY_RISK_SEARCH`` flag
+    (default off). Snippets pass the injection guardrail before inclusion.
+
+    Args:
+        suppliers: Suppliers in the current scoring batch.
+
+    Returns:
+        A prompt-ready block (leading blank lines), or ``""`` when disabled or no
+        usable signal is found.
+    """
+    if not (tavily_enabled() and os.getenv("TAVILY_RISK_SEARCH", "false").lower() in {"1", "true", "yes"}):
+        return ""
+
+    # Cost cap: only the first N suppliers in the batch get a (credit-costing) search.
+    max_suppliers = int(os.getenv("TAVILY_RISK_SEARCH_MAX_SUPPLIERS", "3"))
+    blocks = []
+    for s in suppliers[:max_suppliers]:
+        hits = supplier_deep_search(s.name, s.country_code, s.region or "", s.product_category)
+        snippets = [guard_scraped_text(h.get("content", ""))[:200] for h in hits]
+        snippets = [x for x in snippets if x]
+        if snippets:
+            blocks.append(f"{s.name}: " + " | ".join(snippets[:2]))
+
+    if not blocks:
+        return ""
+    return (
+        "\n\nLIVE CONTEXT (recent web signals per supplier — let this inform, "
+        "not override, your score):\n" + "\n".join(blocks)
+    )
+
+
+def _score_batch(
+    event: Event,
+    suppliers: list[Supplier],
+    industry: str = "electronics",
+    extra_context: str = "",
+) -> list[dict]:
+    """Score a batch of suppliers against one event in a single Gemini call.
+
+    Args:
+        event: The disruption event being scored.
+        suppliers: Up to ``BATCH_SIZE`` suppliers to score in this call.
+        industry: Industry whose risk context is injected into the prompt.
+        extra_context: Optional retrieved "similar past events" block (RAG) to
+            prepend supplier-level priors; empty when RAG is off.
+
+    Returns:
+        A list of dicts (one per supplier, schema
+        :class:`schemas.SupplierRiskScore`) in the input order, or ``[]`` on
+        repeated Gemini failure.
+    """
     supplier_profiles = [
         {
             "name": s.name,
@@ -65,6 +121,8 @@ def _score_batch(event: Event, suppliers: list[Supplier], industry: str = "elect
         f"INDUSTRY CONTEXT:\n{industry_context}\n\n"
         f"EVENT:\n{json.dumps(event_context, indent=2)}\n\n"
         f"SUPPLIERS TO SCORE (in order):\n{json.dumps(supplier_profiles, indent=2)}"
+        f"{extra_context}"
+        f"{_live_supplier_context(suppliers)}"
     )
 
     for attempt in range(3):
@@ -74,17 +132,12 @@ def _score_batch(event: Event, suppliers: list[Supplier], industry: str = "elect
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    response_schema=list[SupplierRiskScore],
                     temperature=0.1,
                     max_output_tokens=4096,
                 ),
             )
-            results = json.loads(response.text)
-            if isinstance(results, list):
-                return results
-            for v in results.values():
-                if isinstance(v, list):
-                    return v
-            return []
+            return [r.model_dump() for r in parse_list(response, SupplierRiskScore)]
         except Exception as exc:
             wait = 2 ** attempt * 3
             logger.warning("[RiskScorer] attempt %d failed: %s — retrying in %ds", attempt + 1, exc, wait)
@@ -105,19 +158,38 @@ def score_event(db: Session, event: Event, industry: str = "electronics") -> lis
         return []
 
     created_scores = []
+    # Placement 4 budget: bound the number of corroboration searches per event.
+    medium_low = int(os.getenv("TAVILY_MEDIUM_LOW", "4"))
+    checks_left = int(os.getenv("TAVILY_MEDIUM_MAX_CHECKS", "5"))
+
+    # RAG prior: similar past events/briefs (retrieved once per event, no-op if RAG off).
+    prior = format_context(retrieve_best(event.headline, kinds=("events", "briefs"), top_k=3))
+    extra_context = f"\n\nSIMILAR PAST EVENTS (institutional memory):\n{prior}" if prior else ""
+
     for i in range(0, len(to_score), BATCH_SIZE):
         batch = to_score[i : i + BATCH_SIZE]
-        results = _score_batch(event, batch, industry=industry)
+        results = _score_batch(event, batch, industry=industry, extra_context=extra_context)
 
-        for supplier, result in zip(batch, results):
+        for supplier, result in zip(batch, results, strict=False):
             score_val = int(result.get("score", 1))
+            reasoning = result.get("reasoning", "")
+
+            # Placement 4: corroborate borderline-MEDIUM scores; elevate +1 when
+            # multiple recent sources confirm the event.
+            if tavily_enabled() and checks_left > 0 and medium_low <= score_val < HIGH_RISK_THRESHOLD:
+                checks_left -= 1
+                verdict = confirm_medium_event(event.headline, event.affected_countries or [])
+                if verdict.get("elevate"):
+                    score_val = min(score_val + 1, HIGH_RISK_THRESHOLD)
+                    reasoning += f" [Tavily: {verdict['signal_count']} corroborating recent sources → elevated]"
+
             data = {
                 "event_id": event.id,
                 "supplier_id": supplier.id,
                 "score": score_val,
                 "impact_window": result.get("impact_window", "unknown"),
                 "affected_tiers": result.get("affected_tiers", [supplier.tier]),
-                "reasoning": result.get("reasoning", ""),
+                "reasoning": reasoning,
             }
             rs = create_risk_score(db, data)
             created_scores.append(rs)
@@ -149,5 +221,8 @@ def run_risk_scorer(industry: str = "electronics") -> list:
 
 
 if __name__ == "__main__":
+    from observability import setup_observability
+
+    setup_observability()
     logging.basicConfig(level=logging.INFO)
     run_risk_scorer()

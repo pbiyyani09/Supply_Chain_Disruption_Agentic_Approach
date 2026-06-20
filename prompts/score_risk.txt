@@ -18,6 +18,7 @@ RULES:
 3. "affected_tiers" is an array of integers, e.g. [1, 2].
 4. "reasoning" must be 2–3 sentences a non-analyst procurement manager can understand. No jargon.
 5. Return ONLY the JSON array — no markdown, no explanation.
+6. A "LIVE CONTEXT" block (recent per-supplier web signals) may follow — let it inform, not override, your scores.
 
 OUTPUT FORMAT:
 [

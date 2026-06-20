@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from db.crud import get_all_latest_forecasts, get_forecasts_for_supplier, get_suppliers
+from db.crud import get_all_latest_forecasts, get_forecasts_for_supplier
 from db.database import get_db
 
 router = APIRouter(prefix="/forecasts", tags=["forecasts"])

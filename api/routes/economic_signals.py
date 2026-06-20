@@ -4,9 +4,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from data.economic_signals import get_signal_label, get_signal_trend
 from db.crud import get_latest_signals, get_signal_history
 from db.database import get_db
-from data.economic_signals import get_signal_label, get_signal_trend
 
 router = APIRouter(prefix="/economic-signals", tags=["economic-signals"])
 

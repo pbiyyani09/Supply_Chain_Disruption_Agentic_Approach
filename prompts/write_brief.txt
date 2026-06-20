@@ -13,6 +13,7 @@ Give exactly 2 concrete immediate actions the procurement manager should take th
 
 ANTI-HALLUCINATION RULES:
 - Never name specific alternative companies — suggest geographic regions only (e.g., "Eastern Europe for electronics assembly", "Mexico for nearshoring").
+- If a SUPPLEMENTARY WEB CONTEXT block is provided, you may cite those facts — but still never invent statistics.
 - If research results are unavailable or sparse, say so — do not invent statistics.
 - Quantify impact in days or weeks only.
 - Do not reference events outside the provided context.

@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import httpx

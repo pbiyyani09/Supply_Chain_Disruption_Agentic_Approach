@@ -229,7 +229,6 @@ def _window_end(months: list[int], start: date) -> date:
     """Find the last month in the contiguous window that includes start."""
     m = start.month
     year = start.year
-    consecutive_months = sorted(months)
     # Walk forward until month is no longer in the window
     while True:
         next_m = (m % 12) + 1

@@ -7,6 +7,21 @@ A real-time, multi-agent system that monitors global signals, maps them to your 
 
 ---
 
+## What's new in v3.0
+
+Built on the v2.0 pipeline, all **flag-gated** and fail-safe (off → exact v2.0 behavior):
+
+- **LangGraph orchestration** — the pipeline is a typed `StateGraph` with a conditional HIGH-risk branch (`orchestration/graph.py`); `POST /scan` and the scheduler both delegate to it.
+- **RAG institutional memory** — `sqlite-vec` + `gemini-embedding-001` over past events/briefs + a static knowledge base, with **RAG-Fusion** (multi-query + RRF) and **reranking** (cross-encoder or self-hosted Gemma). `RAG_ENABLED`, `FUSION_ENABLED`, `RERANK_ENABLED`.
+- **Tavily web scraping** — full-article extraction + deep search in four placements, complementing (not replacing) Gemini Google Search grounding. `TAVILY_ENABLED`.
+- **Guardrails & evals** — Pydantic `response_schema` output contracts, a prompt-injection input guardrail on scraped text, a self-hosted **Gemma faithfulness judge** (`JUDGE_ENABLED`), and offline **Ragas** RAG-quality metrics.
+- **Observability** — **Arize Phoenix** tracing of every Gemini + LangGraph call, with token/cost capture. `PHOENIX_ENABLED`.
+- **Docs & CI** — a navigable documentation **PDF** generated from docstrings (`make docs-pdf`) and a size-aware GitHub Actions pipeline (lint / unit / docker-build / docs).
+
+> Note: v3.0 adds Tavily back as a complementary scraper (full-text + deep search); Gemini Google Search grounding still powers the in-brief web research. See `CLAUDE.md` and the generated docs for details.
+
+---
+
 ## Google AI Studio Integration
 
 This project runs entirely on **Google AI Studio** — the same platform used throughout the Kaggle course. Every LLM call goes through the `google-genai` SDK with `gemini-2.0-flash`.

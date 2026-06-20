@@ -4,9 +4,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-
 MOCK_SCORE_RESPONSE = json.dumps([
     {
         "supplier_name": "TaiwanSemi Corp",

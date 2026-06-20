@@ -11,34 +11,41 @@ extra cost up to generous limits.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from pathlib import Path
 
-from dotenv import load_dotenv
-from google import genai
 from google.genai import types
 from sqlalchemy.orm import Session
 
+from data.tavily_research import event_context_search
+from data.tavily_research import is_enabled as tavily_enabled
 from db.models import Event, RiskScore, Supplier
+from guardrails.injection import guard_scraped_text
+from guardrails.judge import check_faithfulness, judge_enabled
+from providers import get_gemini_client, get_model_name
+from rag.retrieval import format_context, index_text, retrieve_best
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 _BRIEF_PROMPT = (Path(__file__).parent.parent / "prompts" / "write_brief.txt").read_text()
 
-_client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+_client = get_gemini_client()
+_MODEL = get_model_name()
 
 
 def _research_and_write_brief(
     event: Event, supplier: Supplier, risk_score: RiskScore
 ) -> tuple[str, list[str]]:
-    """
-    Uses Gemini with Google Search grounding to research the event
-    and write the 3-paragraph brief.
+    """Research the event with Gemini + Google Search grounding and write the brief.
 
-    Returns (brief_text, alternatives_list).
+    Args:
+        event: The HIGH-severity event to brief on.
+        supplier: The affected supplier.
+        risk_score: The risk score record (score, impact window, reasoning).
+
+    Returns:
+        A ``(brief_text, alternatives_list)`` tuple. Falls back to a plain,
+        non-researched brief if Gemini fails after retries.
     """
     user_prompt = (
         f"Write a supply chain risk brief about the following HIGH-severity event "
@@ -57,6 +64,27 @@ def _research_and_write_brief(
         f"Scoring reasoning: {risk_score.reasoning}\n\n"
         f"Search the web for the latest developments on this event, then write the brief."
     )
+
+    # Ground in institutional memory: similar past briefs/events (no-op if RAG off).
+    prior_block = format_context(
+        retrieve_best(f"{event.headline} {event.category}", kinds=("briefs", "events"), top_k=3)
+    )
+    if prior_block:
+        user_prompt += f"\n\nSIMILAR PAST DISRUPTIONS (institutional memory — for context):\n{prior_block}"
+
+    # Augment grounding with Tavily snippets (guarded against prompt injection),
+    # alongside the native Google Search grounding configured below.
+    if tavily_enabled():
+        lines = []
+        for hit in event_context_search(event.headline):
+            safe = guard_scraped_text(hit.get("content", ""))
+            if safe:
+                lines.append(f"- {safe[:300]} ({hit.get('url', '')})")
+        if lines:
+            user_prompt += (
+                "\n\nSUPPLEMENTARY WEB CONTEXT (Tavily — you may cite these; never invent statistics):\n"
+                + "\n".join(lines)
+            )
 
     for attempt in range(3):
         try:
@@ -112,4 +140,20 @@ def write_brief_for_score(
         event.headline[:60],
         risk_score.score,
     )
-    return _research_and_write_brief(event, supplier, risk_score)
+    brief, alternatives = _research_and_write_brief(event, supplier, risk_score)
+
+    # Second-opinion faithfulness check (local Gemma). Regenerate once if the
+    # brief is judged to contain claims unsupported by the known context.
+    if judge_enabled():
+        contexts = [event.headline, event.brief_reason or "", risk_score.reasoning or ""]
+        verdict = check_faithfulness(brief, contexts)
+        if verdict.get("verdict") == "FLAG":
+            logger.warning(
+                "[ImpactAnalyst] brief flagged unfaithful (%s) — regenerating once",
+                verdict.get("reason", ""),
+            )
+            brief, alternatives = _research_and_write_brief(event, supplier, risk_score)
+
+    # Persist the brief into institutional memory for future retrieval.
+    index_text("briefs", risk_score.id, brief)
+    return brief, alternatives

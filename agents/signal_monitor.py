@@ -5,34 +5,50 @@ then uses Gemini to classify each one as supply-chain-relevant or not.
 """
 from __future__ import annotations
 
-import json
 import logging
-import os
 import time
 from pathlib import Path
 
-from dotenv import load_dotenv
-from google import genai
 from google.genai import types
 from sqlalchemy.orm import Session
 
 from data.industry_profiles import get_keywords
 from data.sources import fetch_all_events, set_industry_keywords
+from data.tavily_research import extract_article_bodies
+from data.tavily_research import is_enabled as tavily_enabled
 from db.crud import create_event, event_exists
 from db.database import SessionLocal
+from guardrails.injection import guard_scraped_text
+from providers import get_gemini_client, get_model_name
+from rag.retrieval import index_text
+from schemas import EventClassification, parse_object
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 _CLASSIFY_PROMPT = (Path(__file__).parent.parent / "prompts" / "classify_event.txt").read_text()
 
-_client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+_client = get_gemini_client()
+_MODEL = get_model_name()
 
 
-def _classify_event(headline: str) -> dict:
-    """Send a single headline to Gemini for classification."""
+def _classify_event(headline: str, body: str = "") -> dict:
+    """Classify a single news item as supply-chain-relevant or not.
+
+    Args:
+        headline: The raw news headline text.
+        body: Optional full-article excerpt (from Tavily). When present it is
+            appended to the prompt so classification is not headline-blind; when
+            absent (extraction disabled/failed), behaviour is unchanged.
+
+    Returns:
+        A dict matching :class:`schemas.EventClassification` (category,
+        affected_countries, severity_hint, is_supply_chain_relevant,
+        brief_reason). On repeated Gemini failure, returns a safe
+        not-relevant default rather than raising.
+    """
     prompt = f"{_CLASSIFY_PROMPT}\n\nHeadline: {headline}"
+    if body:
+        prompt += f"\n\nArticle excerpt:\n{body}"
     for attempt in range(3):
         try:
             response = _client.models.generate_content(
@@ -40,11 +56,12 @@ def _classify_event(headline: str) -> dict:
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    response_schema=EventClassification,
                     temperature=0.1,
                     max_output_tokens=512,
                 ),
             )
-            return json.loads(response.text)
+            return parse_object(response, EventClassification).model_dump()
         except Exception as exc:
             wait = 2 ** attempt * 3
             logger.warning("Gemini classify attempt %d failed: %s — retrying in %ds", attempt + 1, exc, wait)
@@ -69,12 +86,18 @@ def run_signal_monitor(industry: str = "electronics") -> int:
     db: Session = SessionLocal()
     stored = 0
     try:
-        for raw in raw_events:
-            url = raw.get("url", "")
-            if not url or event_exists(db, url):
-                continue
+        # Only consider URLs not already stored, then batch-extract full text
+        # once (cost-aware) when Tavily is enabled.
+        candidates = [r for r in raw_events if r.get("url") and not event_exists(db, r["url"])]
+        bodies: dict[str, str] = {}
+        if tavily_enabled() and candidates:
+            bodies = extract_article_bodies([r["url"] for r in candidates])
+            logger.info("[SignalMonitor] Tavily extracted %d article bodies", len(bodies))
 
-            classification = _classify_event(raw["headline"])
+        for raw in candidates:
+            url = raw["url"]
+            body = guard_scraped_text(bodies.get(url, ""))
+            classification = _classify_event(raw["headline"], body)
 
             if not classification.get("is_supply_chain_relevant", False):
                 continue
@@ -90,7 +113,9 @@ def run_signal_monitor(industry: str = "electronics") -> int:
                 "brief_reason": classification.get("brief_reason", ""),
                 "published_at": raw.get("published_at"),
             }
-            create_event(db, event_data)
+            ev = create_event(db, event_data)
+            # Index into institutional memory for later RAG (no-op when RAG off).
+            index_text("events", ev.id, f"{raw['headline']} {classification.get('brief_reason', '')}".strip())
             stored += 1
             logger.info(
                 "[SignalMonitor] Stored: [%s] %s",
@@ -105,5 +130,8 @@ def run_signal_monitor(industry: str = "electronics") -> int:
 
 
 if __name__ == "__main__":
+    from observability import setup_observability
+
+    setup_observability()
     logging.basicConfig(level=logging.INFO)
     run_signal_monitor()
