@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+# Cancel superseded runs to save Actions minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # ruff fetched on demand (cached); no project install needed for lint.
+      - run: uvx ruff check .
+
+  unit:
+    name: Unit tests (mocked)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # Runtime + dev only — no heavy optional groups (Torch/ragas/Phoenix server).
+      - name: Sync runtime + dev deps
+        run: uv sync --group dev
+      - name: Run tests
+        # Gemini/Tavily/Ollama mocked; a dummy key lets module-level client
+        # construction succeed without any real network calls.
+        env:
+          GOOGLE_API_KEY: dummy-key-for-tests
+          PHOENIX_ENABLED: "false"
+          TAVILY_ENABLED: "false"
+          RAG_ENABLED: "false"
+        run: uv run pytest -q
+
+  build:
+    name: Docker build (app image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Validate the runtime image builds (no push, no Ollama/Phoenix images).
+      - name: Build app image
+        run: docker build -t chainwatch:ci .
+
+  docs:
+    name: Documentation PDF
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # WeasyPrint system libraries for the PDF backend.
+      - name: Install WeasyPrint system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 \
+            libcairo2 libgdk-pixbuf-2.0-0 libffi-dev libharfbuzz-subset0 fonts-dejavu-core
+      - name: Build navigable PDF
+        env:
+          ENABLE_PDF_EXPORT: "1"
+        run: uv run --group docs mkdocs build
+      - name: Upload documentation PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainWatch-Documentation
+          path: site/ChainWatch-Documentation.pdf
+          if-no-files-found: error
